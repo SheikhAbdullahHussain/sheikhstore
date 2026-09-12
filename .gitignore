@@ -58,3 +58,6 @@ yarn.lock
 
 # Lovable
 .lovable/
+
+#bg
+public/bg-removal/

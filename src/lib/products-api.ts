@@ -1,6 +1,16 @@
 import { supabase } from "@/lib/supabase";
 import type { Category, Product, Subcategory } from "@/data/products";
 
+export async function fetchProductById(id: string): Promise<Product | null> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? rowToProduct(data as ProductRow) : null;
+}
+
 type ProductRow = {
   id: string;
   title: string;

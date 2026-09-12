@@ -119,6 +119,7 @@ function Admin() {
       .then(setSession)
       .catch(() => setSession(null))
       .finally(() => setAuthChecked(true));
+      // .finally(() => setAuthChecked(false));
 
     const unsubscribe = onAuthStateChange(setSession);
     return unsubscribe;

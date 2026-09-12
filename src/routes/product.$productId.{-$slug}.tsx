@@ -1,22 +1,23 @@
 import { useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Minus, Plus, ShoppingBag, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { money, useStore } from "@/lib/store";
-import { productSlug, seedProducts } from "@/data/products";
+import { productSlug } from "@/data/products";
+import { fetchProductById } from "@/lib/products-api";
 
 const BASE_URL = "https://sheikh-store-shop.lovable.app";
 
 export const Route = createFileRoute("/product/$productId/{-$slug}")({
-  head: ({ params }) => {
-    const product = seedProducts.find((p) => p.id === params.productId);
-    const url = `${BASE_URL}/product/${params.productId}${
-      product ? `/${productSlug(product)}` : params.slug ? `/${params.slug}` : ""
-    }`;
-
+  loader: async ({ params }) => {
+    const product = await fetchProductById(params.productId);
+    if (!product) throw notFound();
+    return product;
+  },
+  head: ({ params, loaderData: product }) => {
     if (!product) {
       return {
         meta: [
@@ -30,6 +31,7 @@ export const Route = createFileRoute("/product/$productId/{-$slug}")({
       };
     }
 
+    const url = `${BASE_URL}/product/${params.productId}/${productSlug(product)}`;
     const title = `${product.title} — SheikhStore`;
     const description = `${product.description} ${product.category} from SheikhStore — nationwide shipping across Pakistan, 7-day easy exchange and cash on delivery.`.slice(
       0,
@@ -76,7 +78,6 @@ export const Route = createFileRoute("/product/$productId/{-$slug}")({
   notFoundComponent: ProductMissing,
 });
 
-
 function ProductMissing() {
   return (
     <div className="mx-auto max-w-xl px-4 py-24 text-center">
@@ -95,7 +96,8 @@ function ProductDetail() {
   const { productId } = Route.useParams();
   const { products, addToCart, setCartOpen } = useStore();
   const navigate = useNavigate();
-  const product = products.find((p) => p.id === productId);
+  const loaderProduct = Route.useLoaderData();
+  const product = products.find((p) => p.id === productId) ?? loaderProduct;
 
   const [size, setSize] = useState<string | undefined>(undefined);
   const [color, setColor] = useState<string | undefined>(undefined);
@@ -156,6 +158,7 @@ function ProductDetail() {
         <div>
           <Badge variant="secondary" className="uppercase tracking-[0.16em]">
             {product.category}
+            {product.subcategory ? ` · ${product.subcategory}` : ""}
           </Badge>
           <h1 className="mt-3 text-3xl font-bold sm:text-4xl">{product.title}</h1>
 
@@ -235,7 +238,9 @@ function ProductDetail() {
                   <Plus className="size-4" />
                 </button>
               </div>
-              <span className="text-xs text-muted-foreground">{product.stock} in stock</span>
+              <span className="text-xs text-muted-foreground">
+                {product.stock > 0 ? "In stock" : "Out of stock"}
+              </span>
             </div>
           </div>
 
