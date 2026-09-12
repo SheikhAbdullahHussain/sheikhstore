@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Image as ImageIcon, Lock, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Image as ImageIcon, LogOut, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import type { Session } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,12 +23,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { money, useStore } from "@/lib/store";
+import { getSession, onAuthStateChange, signIn, signOut } from "@/lib/auth";
 import {
   MAX_FILE_MB,
   MAX_IMAGES,
   parseVariants,
   pickProductImages,
 } from "@/lib/images";
+import {
+  deleteOrder,
+  fetchOrders,
+  updateOrderStatus,
+  type OrderRow,
+  type OrderStatus,
+} from "@/lib/orders-api";
+import {
+  deleteSubscriber,
+  fetchSubscribers,
+  type Subscriber,
+} from "@/lib/subscribers-api";
 import type { Category, Product } from "@/data/products";
 
 export const Route = createFileRoute("/admin")({
@@ -48,6 +62,7 @@ export const Route = createFileRoute("/admin")({
 });
 
 const CATS: Category[] = ["Clothing", "Accessories", "Electronics"];
+const ORDER_STATUSES: OrderStatus[] = ["pending", "shipped", "delivered"];
 
 type FormState = {
   title: string;
@@ -75,17 +90,126 @@ const emptyForm: FormState = {
 
 function Admin() {
   const { products, addProduct, updateProduct, deleteProduct } = useStore();
-  const [unlocked, setUnlocked] = useState(false);
-  const [pass, setPass] = useState("");
+
+  // ---------- auth ----------
+  const [session, setSession] = useState<Session | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  useEffect(() => {
+    getSession()
+      .then(setSession)
+      .catch(() => setSession(null))
+      .finally(() => setAuthChecked(true));
+
+    const unsubscribe = onAuthStateChange(setSession);
+    return unsubscribe;
+  }, []);
+
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoggingIn(true);
+    try {
+      await signIn(email, password);
+      setPassword("");
+    } catch (err) {
+      console.error("Login failed:", err);
+      toast.error("Incorrect email or password");
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await signOut();
+      toast.success("Signed out");
+    } catch (err) {
+      console.error("Sign out failed:", err);
+      toast.error("Couldn't sign out");
+    }
+  };
+
+  // ---------- orders ----------
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
+  // ---------- subscribers ----------
+  const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
+  const [subscribersLoading, setSubscribersLoading] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+
+    setOrdersLoading(true);
+    fetchOrders()
+      .then(setOrders)
+      .catch((err) => {
+        console.error("Failed to load orders:", err);
+        toast.error("Couldn't load orders");
+      })
+      .finally(() => setOrdersLoading(false));
+
+    setSubscribersLoading(true);
+    fetchSubscribers()
+      .then(setSubscribers)
+      .catch((err) => {
+        console.error("Failed to load subscribers:", err);
+        toast.error("Couldn't load subscribers");
+      })
+      .finally(() => setSubscribersLoading(false));
+  }, [session]);
+
+  const changeOrderStatus = async (id: string, status: OrderStatus) => {
+    try {
+      await updateOrderStatus(id, status);
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+      toast.success("Order status updated");
+    } catch (err) {
+      console.error("Failed to update order status:", err);
+      toast.error("Couldn't update order status");
+    }
+  };
+
+  const removeOrder = async (id: string) => {
+    try {
+      await deleteOrder(id);
+      setOrders((prev) => prev.filter((o) => o.id !== id));
+      toast.success("Order deleted");
+    } catch (err) {
+      console.error("Failed to delete order:", err);
+      toast.error("Couldn't delete order");
+    }
+  };
+
+  const removeSubscriber = async (id: string) => {
+    try {
+      await deleteSubscriber(id);
+      setSubscribers((prev) => prev.filter((s) => s.id !== id));
+      toast.success("Subscriber removed");
+    } catch (err) {
+      console.error("Failed to remove subscriber:", err);
+      toast.error("Couldn't remove subscriber");
+    }
+  };
+
+  // ---------- product form ----------
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [removeBg, setRemoveBg] = useState(true);
+  const [bgColor, setBgColor] = useState("#ffffff");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onPickFiles = async (files: FileList) => {
     setUploading(true);
     try {
-      const { images, errors } = await pickProductImages(files, form.images.length);
+      const { images, errors } = await pickProductImages(files, form.images.length, {
+        removeBg,
+        bgColor,
+      });
       if (images.length) {
         setForm((f) => ({ ...f, images: [...f.images, ...images] }));
         toast.success(`${images.length} image${images.length > 1 ? "s" : ""} added`);
@@ -96,35 +220,46 @@ function Admin() {
     }
   };
 
-  if (!unlocked) {
+  if (!authChecked) {
+    return (
+      <section className="mx-auto max-w-sm px-4 py-24 text-center text-sm text-muted-foreground sm:px-6">
+        Checking session…
+      </section>
+    );
+  }
+
+  if (!session) {
     return (
       <section className="mx-auto max-w-sm px-4 py-24 sm:px-6">
         <div className="surface-elevated hairline rounded-2xl p-6 text-center">
           <span className="mx-auto grid size-12 place-items-center rounded-full bg-secondary">
-            <Lock className="size-5 text-gold" />
+            <LogOut className="size-5 rotate-180 text-gold" />
           </span>
-          <h1 className="mt-4 text-xl font-bold">Admin Access</h1>
+          <h1 className="mt-4 text-xl font-bold">Admin Login</h1>
           <p className="mt-2 text-xs text-muted-foreground">
-            Demo gate — passcode is <span className="font-mono">sheikh2026</span>. Connect Lovable
-            Cloud for real accounts and roles.
+            Sign in with your Supabase admin account.
           </p>
-          <form
-            className="mt-5 space-y-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (pass === "sheikh2026") setUnlocked(true);
-              else toast.error("Incorrect passcode");
-            }}
-          >
+          <form className="mt-5 space-y-3" onSubmit={login}>
+            <Input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              aria-label="Admin email"
+              autoComplete="email"
+            />
             <Input
               type="password"
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
-              placeholder="Passcode"
-              aria-label="Admin passcode"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              aria-label="Admin password"
+              autoComplete="current-password"
             />
-            <Button type="submit" className="w-full">
-              Unlock dashboard
+            <Button type="submit" className="w-full" disabled={loggingIn}>
+              {loggingIn ? "Signing in…" : "Sign in"}
             </Button>
           </form>
         </div>
@@ -146,35 +281,6 @@ function Admin() {
       featured: p.featured ?? false,
     });
   };
-
-  // const submit = (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   if (!form.images.length) {
-  //     toast.error("Upload at least one product image from your device");
-  //     return;
-  //   }
-  //   const payload = {
-  //     title: form.title,
-  //     price: Number(form.price),
-  //     category: form.category,
-  //     description: form.description,
-  //     image: form.images[0]!,
-  //     images: form.images,
-  //     sizes: parseVariants(form.sizes),
-  //     colors: parseVariants(form.colors),
-  //     stock: Number(form.stock),
-  //     featured: form.featured,
-  //   };
-  //   if (editingId) {
-  //     updateProduct(editingId, payload);
-  //     toast.success("Product updated");
-  //   } else {
-  //     addProduct(payload);
-  //     toast.success("Product added to the catalogue");
-  //   }
-  //   setForm(emptyForm);
-  //   setEditingId(null);
-  // };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,9 +318,17 @@ function Admin() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <p className="text-[11px] uppercase tracking-[0.24em] text-gold">Dashboard</p>
-      <h1 className="mt-2 text-3xl font-bold">Product Management</h1>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.24em] text-gold">Dashboard</p>
+          <h1 className="mt-2 text-3xl font-bold">Product Management</h1>
+        </div>
+        <Button variant="outline" size="sm" onClick={logout}>
+          <LogOut className="size-4" /> Sign out
+        </Button>
+      </div>
 
+      {/* ================= PRODUCTS ================= */}
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_1.6fr]">
         <form onSubmit={submit} className="surface-elevated hairline h-fit space-y-4 rounded-2xl p-6">
           <div className="flex items-center justify-between">
@@ -324,6 +438,31 @@ function Admin() {
                 e.target.value = "";
               }}
             />
+
+            <div className="flex flex-wrap items-center gap-4 rounded-lg border border-dashed p-3 text-xs">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={removeBg}
+                  onChange={(e) => setRemoveBg(e.target.checked)}
+                  className="size-4 rounded border"
+                />
+                Auto-remove background
+              </label>
+              {removeBg && (
+                <label className="flex items-center gap-2">
+                  Background colour
+                  <input
+                    type="color"
+                    value={bgColor}
+                    onChange={(e) => setBgColor(e.target.value)}
+                    className="h-7 w-10 cursor-pointer rounded border"
+                    aria-label="Background colour"
+                  />
+                </label>
+              )}
+            </div>
+
             <Button
               type="button"
               variant="outline"
@@ -332,12 +471,16 @@ function Admin() {
               onClick={() => fileRef.current?.click()}
             >
               <Upload className="size-4" />
-              {uploading ? "Processing…" : "Upload from this device"}
+              {uploading
+                ? removeBg
+                  ? "Removing background…"
+                  : "Processing…"
+                : "Upload from this device"}
             </Button>
             <p className="text-[11px] text-muted-foreground">
               Single or multiple images from your device · JPG, PNG, WEBP or AVIF · up to{" "}
               {MAX_FILE_MB}MB each · max {MAX_IMAGES} per product ({form.images.length}/{MAX_IMAGES}{" "}
-              added)
+              added){removeBg ? " · first upload downloads the AI model, may take a moment" : ""}
             </p>
             {form.images.length ? (
               <div className="grid grid-cols-3 gap-2 pt-1">
@@ -373,18 +516,6 @@ function Admin() {
               </div>
             )}
           </div>
-          {/* <div className="flex items-center gap-2">
-            <input
-              id="a-featured"
-              type="checkbox"
-              checked={form.featured}
-              onChange={(e) => setForm({ ...form, featured: e.target.checked })}
-              className="size-4 rounded border"
-            />
-            <Label htmlFor="a-featured" className="cursor-pointer">
-              Show in "Featured & Top Selling"
-            </Label>
-          </div> */}
           <div className="space-y-2">
             <Label htmlFor="a-desc">Description</Label>
             <Textarea
@@ -445,9 +576,14 @@ function Admin() {
                           size="icon"
                           variant="ghost"
                           aria-label={`Delete ${p.title}`}
-                          onClick={() => {
-                            deleteProduct(p.id);
-                            toast.success("Product deleted");
+                          onClick={async () => {
+                            try {
+                              await deleteProduct(p.id);
+                              toast.success("Product deleted");
+                            } catch (err) {
+                              console.error("Failed to delete product:", err);
+                              toast.error("Couldn't delete the product");
+                            }
                           }}
                         >
                           <Trash2 className="size-4 text-destructive" />
@@ -456,6 +592,139 @@ function Admin() {
                     </TableCell>
                   </TableRow>
                 ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </div>
+
+      {/* ================= ORDERS ================= */}
+      <div className="mt-14">
+        <h2 className="text-xl font-bold">Orders</h2>
+        <div className="surface-elevated hairline mt-4 overflow-hidden rounded-2xl">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Order</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Total</TableHead>
+                  <TableHead>Payment</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ordersLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                      Loading orders…
+                    </TableCell>
+                  </TableRow>
+                ) : orders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                      No orders yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  orders.map((o) => (
+                    <TableRow key={o.id}>
+                      <TableCell className="text-sm font-medium">{o.id}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(o.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <div>{o.shipping.name}</div>
+                        <div className="text-xs text-muted-foreground">{o.shipping.phone}</div>
+                      </TableCell>
+                      <TableCell className="text-sm">{money(o.total)}</TableCell>
+                      <TableCell className="text-sm uppercase text-muted-foreground">
+                        {o.payment}
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={o.status}
+                          onValueChange={(v) => changeOrderStatus(o.id, v as OrderStatus)}
+                        >
+                          <SelectTrigger className="w-32 capitalize">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ORDER_STATUSES.map((s) => (
+                              <SelectItem key={s} value={s} className="capitalize">
+                                {s}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Delete order ${o.id}`}
+                          onClick={() => removeOrder(o.id)}
+                        >
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </div>
+
+      {/* ================= SUBSCRIBERS ================= */}
+      <div className="mt-14 mb-4">
+        <h2 className="text-xl font-bold">Newsletter Subscribers</h2>
+        <div className="surface-elevated hairline mt-4 overflow-hidden rounded-2xl">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Subscribed on</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {subscribersLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                      Loading subscribers…
+                    </TableCell>
+                  </TableRow>
+                ) : subscribers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                      No subscribers yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  subscribers.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="text-sm font-medium">{s.email}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(s.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label={`Remove ${s.email}`}
+                          onClick={() => removeSubscriber(s.id)}
+                        >
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>

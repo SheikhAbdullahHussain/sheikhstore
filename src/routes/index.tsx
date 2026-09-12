@@ -3,7 +3,8 @@ import { ArrowRight, RefreshCcw, Truck, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FeaturedCarousel } from "@/components/store/FeaturedCarousel";
 import { ProductGrid } from "@/components/store/ProductGrid";
-import heroImage from "@/assets/hero.jpg";
+// import heroImage from "@/assets/hero.jpg";
+import { Product } from '@/data/products';
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -71,7 +72,8 @@ function Index() {
             </dl>
           </div>
           <img
-            src={heroImage}
+            // src={/product1.jpeg}
+            // src={product1}
             alt="Curated flat lay of premium SheikhStore accessories"
             width={1600}
             height={1100}

@@ -18,10 +18,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
+import { insertSubscriber } from "@/lib/subscribers-api";
 import { Logo } from "./Logo";
 
 export function Footer() {
   const [email, setEmail] = useState("");
+  const [subscribing, setSubscribing] = useState(false);
 
   return (
     <footer className="mt-24 border-t bg-secondary/50">
@@ -165,19 +167,6 @@ export function Footer() {
                 Pakistan
               </li>
             </ul>
-
-            {/* <div className="mt-4 flex gap-2">
-              {[Instagram, Facebook, Twitter].map((Icon, i) => (
-                <a
-                  key={i}
-                  href="https://sheikhstore.example"
-                  aria-label="SheikhStore social profile"
-                  className="grid size-9 place-items-center rounded-full border transition-colors hover:bg-background"
-                >
-                  <Icon className="size-4" />
-                </a>
-              ))}
-            </div> */}
           </CollapsibleContent>
         </Collapsible>
 
@@ -203,19 +192,6 @@ export function Footer() {
               Pakistan — nationwide delivery
             </li>
           </ul>
-
-          {/* <div className="mt-4 flex gap-2">
-            {[Instagram, Facebook, Twitter].map((Icon, i) => (
-              <a
-                key={i}
-                href="https://sheikhstore.example"
-                aria-label="SheikhStore social profile"
-                className="grid size-9 place-items-center rounded-full border transition-colors hover:bg-background"
-              >
-                <Icon className="size-4" />
-              </a>
-            ))}
-          </div> */}
         </div>
 
         {/* ================= NEWSLETTER ================= */}
@@ -231,13 +207,25 @@ export function Footer() {
 
           <form
             className="mt-4 flex gap-2"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-
               if (!email) return;
-
-              toast.success("You're subscribed — welcome to SheikhStore.");
-              setEmail("");
+              setSubscribing(true);
+              try {
+                await insertSubscriber(email);
+                toast.success("You're subscribed — welcome to SheikhStore.");
+                setEmail("");
+              } catch (err: unknown) {
+                const code = (err as { code?: string } | null)?.code;
+                if (code === "23505") {
+                  toast.error("This email is already subscribed.");
+                } else {
+                  console.error("Subscribe failed:", err);
+                  toast.error("Couldn't subscribe right now. Please try again.");
+                }
+              } finally {
+                setSubscribing(false);
+              }
             }}
           >
             <Input
@@ -249,7 +237,9 @@ export function Footer() {
               aria-label="Email address"
             />
 
-            <Button type="submit">Join</Button>
+            <Button type="submit" disabled={subscribing}>
+              {subscribing ? "Joining…" : "Join"}
+            </Button>
           </form>
         </div>
       </div>
