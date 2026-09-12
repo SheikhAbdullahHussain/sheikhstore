@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import type { Category, Product } from "@/data/products";
+import type { Category, Product, Subcategory } from "@/data/products";
 
 type ProductRow = {
   id: string;
@@ -7,6 +7,7 @@ type ProductRow = {
   price: number;
   compare_at: number | null;
   category: Category;
+  subcategory: string | null;
   description: string;
   image: string;
   images: string[] | null;
@@ -25,6 +26,7 @@ function rowToProduct(r: ProductRow): Product {
     price: Number(r.price),
     compareAt: r.compare_at ?? undefined,
     category: r.category,
+    subcategory: (r.subcategory as Subcategory | null) ?? undefined,
     description: r.description,
     image: r.image,
     images: r.images ?? undefined,
@@ -56,6 +58,7 @@ export async function insertProduct(
       price: p.price,
       compare_at: p.compareAt ?? null,
       category: p.category,
+      subcategory: p.subcategory ?? null,
       description: p.description,
       image: p.image,
       images: p.images ?? null,
@@ -81,6 +84,7 @@ export async function updateProductRow(
   if (patch.price !== undefined) payload.price = patch.price;
   if (patch.compareAt !== undefined) payload.compare_at = patch.compareAt;
   if (patch.category !== undefined) payload.category = patch.category;
+  if (patch.subcategory !== undefined) payload.subcategory = patch.subcategory ?? null;
   if (patch.description !== undefined) payload.description = patch.description;
   if (patch.image !== undefined) payload.image = patch.image;
   if (patch.images !== undefined) payload.images = patch.images;

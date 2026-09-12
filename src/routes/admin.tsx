@@ -24,12 +24,7 @@ import {
 } from "@/components/ui/select";
 import { money, useStore } from "@/lib/store";
 import { getSession, onAuthStateChange, signIn, signOut } from "@/lib/auth";
-import {
-  MAX_FILE_MB,
-  MAX_IMAGES,
-  parseVariants,
-  pickProductImages,
-} from "@/lib/images";
+import { MAX_FILE_MB, MAX_IMAGES, pickProductImages } from "@/lib/images";
 import {
   deleteOrder,
   fetchOrders,
@@ -42,7 +37,7 @@ import {
   fetchSubscribers,
   type Subscriber,
 } from "@/lib/subscribers-api";
-import type { Category, Product } from "@/data/products";
+import { CATEGORIES, SUBCATEGORIES, type Category, type Product, type Subcategory } from "@/data/products";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -61,31 +56,52 @@ export const Route = createFileRoute("/admin")({
   component: Admin,
 });
 
-const CATS: Category[] = ["Clothing", "Accessories", "Electronics"];
+const CATS: Category[] = CATEGORIES.filter((c): c is Category => c !== "All");
 const ORDER_STATUSES: OrderStatus[] = ["pending", "shipped", "delivered"];
+const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL"];
+const COLOR_OPTIONS: { name: string; hex: string }[] = [
+  { name: "Black", hex: "#111111" },
+  { name: "White", hex: "#ffffff" },
+  { name: "Navy", hex: "#1f2a44" },
+  { name: "Maroon", hex: "#6b1f2a" },
+  { name: "Beige", hex: "#e8dcc8" },
+  { name: "Grey", hex: "#9a9a9a" },
+  { name: "Pink", hex: "#e8a0b4" },
+  { name: "Mustard", hex: "#d9a441" },
+  { name: "Green", hex: "#3f6b4a" },
+  { name: "Blue", hex: "#3a5f9e" },
+];
+
+/** Rough luminance check so the checkmark on a swatch stays readable. */
+function isLight(hex: string): boolean {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150;
+}
 
 type FormState = {
   title: string;
   price: string;
   category: Category;
+  subcategory: Subcategory | "";
   description: string;
   images: string[];
-  sizes: string;
-  colors: string;
-  stock: string;
-  featured: boolean;
+  sizes: string[];
+  colors: string[];
+  inStock: boolean;
 };
 
 const emptyForm: FormState = {
   title: "",
   price: "",
-  category: "Clothing",
+  category: "Men",
+  subcategory: "",
   description: "",
   images: [],
-  sizes: "",
-  colors: "",
-  stock: "",
-  featured: false,
+  sizes: [],
+  colors: [],
+  inStock: true,
 };
 
 function Admin() {
@@ -203,6 +219,18 @@ function Admin() {
   const [bgColor, setBgColor] = useState("#ffffff");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const toggleSize = (s: string) =>
+    setForm((f) => ({
+      ...f,
+      sizes: f.sizes.includes(s) ? f.sizes.filter((x) => x !== s) : [...f.sizes, s],
+    }));
+
+  const toggleColor = (name: string) =>
+    setForm((f) => ({
+      ...f,
+      colors: f.colors.includes(name) ? f.colors.filter((x) => x !== name) : [...f.colors, name],
+    }));
+
   const onPickFiles = async (files: FileList) => {
     setUploading(true);
     try {
@@ -273,12 +301,12 @@ function Admin() {
       title: p.title,
       price: String(p.price),
       category: p.category,
+      subcategory: p.subcategory ?? "",
       description: p.description,
       images: p.images?.length ? p.images : p.image ? [p.image] : [],
-      sizes: (p.sizes ?? []).join(", "),
-      colors: (p.colors ?? []).join(", "),
-      stock: String(p.stock),
-      featured: p.featured ?? false,
+      sizes: p.sizes ?? [],
+      colors: p.colors ?? [],
+      inStock: p.stock > 0,
     });
   };
 
@@ -288,17 +316,21 @@ function Admin() {
       toast.error("Upload at least one product image from your device");
       return;
     }
+    if (form.category !== "Toddlers" && !form.subcategory) {
+      toast.error("Select a type (Stitched / Unstitched)");
+      return;
+    }
     const payload = {
       title: form.title,
       price: Number(form.price),
       category: form.category,
+      subcategory: form.category === "Toddlers" ? undefined : (form.subcategory as Subcategory),
       description: form.description,
       image: form.images[0]!,
       images: form.images,
-      sizes: parseVariants(form.sizes),
-      colors: parseVariants(form.colors),
-      stock: Number(form.stock),
-      featured: form.featured,
+      sizes: form.sizes,
+      colors: form.colors,
+      stock: form.inStock ? 50 : 0,
     };
     try {
       if (editingId) {
@@ -372,56 +404,125 @@ function Admin() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="a-stock">Stock</Label>
-              <Input
-                id="a-stock"
-                type="number"
-                min="0"
-                required
-                value={form.stock}
-                onChange={(e) => setForm({ ...form, stock: e.target.value })}
-              />
+              <Label>Availability</Label>
+              <Select
+                value={form.inStock ? "in" : "out"}
+                onValueChange={(v) => setForm({ ...form, inStock: v === "in" })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="in">In Stock</SelectItem>
+                  <SelectItem value="out">Out of Stock</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Category</Label>
-            <Select
-              value={form.category}
-              onValueChange={(v) => setForm({ ...form, category: v as Category })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CATS.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="a-sizes">Sizes</Label>
-              <Input
-                id="a-sizes"
-                placeholder="S, M, L, XL"
-                value={form.sizes}
-                onChange={(e) => setForm({ ...form, sizes: e.target.value })}
-              />
-              <p className="text-[11px] text-muted-foreground">Comma separated. Leave blank if none.</p>
+              <Label>Category</Label>
+              <Select
+                value={form.category}
+                onValueChange={(v) =>
+                  setForm({
+                    ...form,
+                    category: v as Category,
+                    subcategory: v === "Toddlers" ? "" : form.subcategory,
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="a-colors">Colours</Label>
-              <Input
-                id="a-colors"
-                placeholder="Black, Camel, Charcoal"
-                value={form.colors}
-                onChange={(e) => setForm({ ...form, colors: e.target.value })}
-              />
-              <p className="text-[11px] text-muted-foreground">Comma separated. Leave blank if none.</p>
+            {form.category !== "Toddlers" && (
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={form.subcategory}
+                  onValueChange={(v) => setForm({ ...form, subcategory: v as Subcategory })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUBCATEGORIES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Sizes</Label>
+            <div className="flex flex-wrap gap-2">
+              {SIZE_OPTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => toggleSize(s)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    form.sizes.includes(s)
+                      ? "border-foreground bg-foreground text-background"
+                      : "hover:bg-secondary"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
+            <p className="text-[11px] text-muted-foreground">Leave all unselected if not applicable.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Colours</Label>
+            <div className="flex flex-wrap gap-3">
+              {COLOR_OPTIONS.map((c) => {
+                const selected = form.colors.includes(c.name);
+                return (
+                  <button
+                    key={c.name}
+                    type="button"
+                    title={c.name}
+                    aria-label={c.name}
+                    aria-pressed={selected}
+                    onClick={() => toggleColor(c.name)}
+                    className={`relative size-9 rounded-full border-2 transition-transform ${
+                      selected ? "scale-110 border-gold" : "border-transparent"
+                    }`}
+                    style={{
+                      backgroundColor: c.hex,
+                      boxShadow: c.hex === "#ffffff" ? "inset 0 0 0 1px rgba(0,0,0,0.15)" : undefined,
+                    }}
+                  >
+                    {selected && (
+                      <span
+                        className="absolute inset-0 grid place-items-center text-xs font-bold"
+                        style={{ color: isLight(c.hex) ? "#000" : "#fff" }}
+                      >
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {form.colors.length ? form.colors.join(", ") : "No colours selected"}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -559,9 +660,22 @@ function Admin() {
                         <span className="text-sm font-medium">{p.title}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{p.category}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {p.category}
+                      {p.subcategory ? ` · ${p.subcategory}` : ""}
+                    </TableCell>
                     <TableCell className="text-sm">{money(p.price)}</TableCell>
-                    <TableCell className="text-sm">{p.stock}</TableCell>
+                    <TableCell className="text-sm">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          p.stock > 0
+                            ? "bg-green-100 text-green-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {p.stock > 0 ? "In Stock" : "Out of Stock"}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button
