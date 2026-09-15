@@ -28,7 +28,7 @@ export const Route = createFileRoute("/")({
 
 const perks = [
   { icon: Truck, title: "Nationwide shipping", copy: "Free delivery all across Pakistan" },
-  { icon: RefreshCcw, title: "7-day easy exchange", copy: "Quick, hassle-free size or item swaps" },
+  { icon: RefreshCcw, title: "Easy exchange", copy: "Quick, hassle-free size or item swaps" },
   { icon: Wallet, title: "Cash on delivery", copy: "Pay at your doorstep, anywhere in Pakistan" },
 ];
 
@@ -73,7 +73,7 @@ function Index() {
           </div>
           <img
             // src={/product1.jpeg}
-            // src={product1}
+            // src={Product}
             alt="Curated flat lay of premium SheikhStore accessories"
             width={1600}
             height={1100}
