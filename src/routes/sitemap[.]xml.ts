@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
-import { productSlug, seedProducts } from "@/data/products";
+import { productSlug } from "@/data/products";
 
 const BASE_URL = "https://sheikh-store-shop.lovable.app";
 

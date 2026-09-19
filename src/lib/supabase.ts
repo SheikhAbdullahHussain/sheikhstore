@@ -9,4 +9,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Use sessionStorage instead of the default localStorage so the admin
+    // login doesn't outlive the browser tab — closing the tab logs you out,
+    // which matters more here than "stay signed in forever" convenience.
+    // sessionStorage is undefined during SSR, so guard for that.
+    storage: typeof window !== "undefined" ? window.sessionStorage : undefined,
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});

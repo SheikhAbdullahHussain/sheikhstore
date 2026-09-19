@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import { ProductGrid } from "@/components/store/ProductGrid";
 
+const searchSchema = z.object({
+  category: z.enum(["Men", "Women", "Kids"]).optional(),
+  subcategory: z.enum(["Stitched (Ready to Wear)", "Unstitched", "Boys", "Girls"]).optional(),
+});
+
 export const Route = createFileRoute("/collections")({
+  validateSearch: searchSchema,
   head: () => ({
     meta: [
       { title: "Collections — Shop All SheikhStore Products" },
@@ -21,6 +28,8 @@ export const Route = createFileRoute("/collections")({
 });
 
 function Collections() {
+  const { category, subcategory } = Route.useSearch();
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <p className="text-[11px] uppercase tracking-[0.24em] text-gold">Collections</p>
@@ -29,7 +38,10 @@ function Collections() {
         Filter by category or search to find exactly what you're after.
       </p>
       <div className="mt-10">
-        <ProductGrid />
+        <ProductGrid
+          initialCategory={category ?? "All"}
+          initialSubcategory={subcategory ?? "All"}
+        />
       </div>
     </section>
   );

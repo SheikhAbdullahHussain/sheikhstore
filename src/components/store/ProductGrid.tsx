@@ -1,24 +1,46 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { CATEGORIES } from "@/data/products";
+import { CATEGORIES, CLOTHING_TYPES, KIDS_GENDERS, type Subcategory } from "@/data/products";
 import { useStore } from "@/lib/store";
 import { ProductCard } from "./ProductCard";
 
-export function ProductGrid() {
+type SubcategoryFilter = Subcategory | "All";
+
+type ProductGridProps = {
+  initialCategory?: (typeof CATEGORIES)[number];
+  initialSubcategory?: SubcategoryFilter;
+};
+
+export function ProductGrid({
+  initialCategory = "All",
+  initialSubcategory = "All",
+}: ProductGridProps) {
   const { products } = useStore();
-  const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("All");
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number]>(initialCategory);
+  const [subcategory, setSubcategory] = useState<SubcategoryFilter>(initialSubcategory);
   const [query, setQuery] = useState("");
+
+  // Re-sync when navigated here with different search params (e.g. from the
+  // hero slider's "Shop Now" links) rather than only on first mount.
+  useEffect(() => {
+    setCategory(initialCategory);
+    setSubcategory(initialSubcategory);
+  }, [initialCategory, initialSubcategory]);
+
+  const subcategoryOptions =
+    category === "Kids" ? KIDS_GENDERS : category === "Men" || category === "Women" ? CLOTHING_TYPES : [];
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return products.filter(
       (p) =>
         (category === "All" || p.category === category) &&
+        (subcategoryOptions.length === 0 || subcategory === "All" || p.subcategory === subcategory) &&
         (q === "" || p.title.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)),
     );
-  }, [products, category, query]);
+  }, [products, category, subcategory, subcategoryOptions.length, query]);
 
   return (
     <div>
@@ -30,7 +52,10 @@ export function ProductGrid() {
               size="sm"
               variant={category === c ? "default" : "outline"}
               className="rounded-full"
-              onClick={() => setCategory(c)}
+              onClick={() => {
+                setCategory(c);
+                setSubcategory("All");
+              }}
             >
               {c}
             </Button>
@@ -47,6 +72,30 @@ export function ProductGrid() {
           />
         </div>
       </div>
+
+      {subcategoryOptions.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={subcategory === "All" ? "secondary" : "ghost"}
+            className="rounded-full"
+            onClick={() => setSubcategory("All")}
+          >
+            All types
+          </Button>
+          {subcategoryOptions.map((s) => (
+            <Button
+              key={s}
+              size="sm"
+              variant={subcategory === s ? "secondary" : "ghost"}
+              className="rounded-full"
+              onClick={() => setSubcategory(s)}
+            >
+              {s}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <p className="py-16 text-center text-sm text-muted-foreground">

@@ -1,15 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import type { Category, Product, Subcategory } from "@/data/products";
-
-export async function fetchProductById(id: string): Promise<Product | null> {
-  const { data, error } = await supabase
-    .from("products")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw error;
-  return data ? rowToProduct(data as ProductRow) : null;
-}
+import type { Category, Measurements, Product, Subcategory } from "@/data/products";
 
 type ProductRow = {
   id: string;
@@ -26,6 +16,7 @@ type ProductRow = {
   stock: number;
   sizes: string[] | null;
   colors: string[] | null;
+  measurements: Measurements | null;
   featured: boolean;
 };
 
@@ -45,6 +36,7 @@ function rowToProduct(r: ProductRow): Product {
     stock: r.stock,
     sizes: r.sizes ?? undefined,
     colors: r.colors ?? undefined,
+    measurements: r.measurements ?? undefined,
     featured: r.featured ?? undefined,
   };
 }
@@ -56,6 +48,16 @@ export async function fetchProducts(): Promise<Product[]> {
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data as ProductRow[]).map(rowToProduct);
+}
+
+export async function fetchProductById(id: string): Promise<Product | null> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? rowToProduct(data as ProductRow) : null;
 }
 
 export async function insertProduct(
@@ -75,6 +77,7 @@ export async function insertProduct(
       stock: p.stock,
       sizes: p.sizes ?? null,
       colors: p.colors ?? null,
+      measurements: p.measurements ?? null,
       featured: p.featured ?? false,
       rating: 5,
       reviews: 0,
@@ -101,6 +104,7 @@ export async function updateProductRow(
   if (patch.stock !== undefined) payload.stock = patch.stock;
   if (patch.sizes !== undefined) payload.sizes = patch.sizes;
   if (patch.colors !== undefined) payload.colors = patch.colors;
+  if (patch.measurements !== undefined) payload.measurements = patch.measurements ?? null;
   if (patch.featured !== undefined) payload.featured = patch.featured;
 
   const { data, error } = await supabase

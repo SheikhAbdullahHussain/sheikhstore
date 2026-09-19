@@ -1,5 +1,15 @@
-export type Category = "Men" | "Women" | "Toddlers";
-export type Subcategory = "Stitched (Ready to Wear)" | "Unstitched";
+export type Category = "Men" | "Women" | "Kids";
+export type ClothingType = "Stitched (Ready to Wear)" | "Unstitched";
+export type KidsGender = "Boys" | "Girls";
+export type Subcategory = ClothingType | KidsGender;
+
+export type Measurements = {
+  chest?: string;
+  length?: string;
+  shoulder?: string;
+  waist?: string;
+  sleeve?: string;
+};
 
 export type Product = {
   id: string;
@@ -7,7 +17,7 @@ export type Product = {
   price: number;
   compareAt?: number | undefined;
   category: Category;
-  /** Only meaningful for Men/Women — Toddlers has no subcategory. */
+  /** Men/Women -> Stitched/Unstitched. Kids -> Boys/Girls. */
   subcategory?: Subcategory | undefined;
   description: string;
   image: string;
@@ -19,11 +29,14 @@ export type Product = {
   stock: number;
   sizes?: string[] | undefined;
   colors?: string[] | undefined;
+  /** Optional garment measurements (chest, length, shoulder, waist, sleeve). */
+  measurements?: Measurements | undefined;
   featured?: boolean | undefined;
 };
 
-export const CATEGORIES: Array<"All" | Category> = ["All", "Men", "Women", "Toddlers"];
-export const SUBCATEGORIES: Subcategory[] = ["Stitched (Ready to Wear)", "Unstitched"];
+export const CATEGORIES: Array<"All" | Category> = ["All", "Men", "Women", "Kids"];
+export const CLOTHING_TYPES: ClothingType[] = ["Stitched (Ready to Wear)", "Unstitched"];
+export const KIDS_GENDERS: KidsGender[] = ["Boys", "Girls"];
 
 export const productSlug = (p: Pick<Product, "title">) =>
   p.title

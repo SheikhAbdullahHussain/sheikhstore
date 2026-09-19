@@ -11,7 +11,9 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { StoreProvider } from "@/lib/store";
+import { StoreProvider, useStore } from "@/lib/store";
+import { LoadingScreen } from "@/components/store/LoadingScreen";
+import { SocialBar } from "@/components/store/SocialBar";
 import { Navbar } from "@/components/store/Navbar";
 import { Footer } from "@/components/store/Footer";
 import { CartSheet } from "@/components/store/CartSheet";
@@ -138,15 +140,27 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <StoreProvider>
-        <Navbar />
-        <main className="min-h-screen pt-16">
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-        </main>
-        <Footer />
-        <CartSheet />
-        <Toaster position="top-right" />
+        <AppShell />
       </StoreProvider>
     </QueryClientProvider>
+  );
+}
+
+function AppShell() {
+  const { productsLoading } = useStore();
+
+  return (
+    <>
+      <LoadingScreen visible={productsLoading} />
+      <SocialBar />
+      <Navbar />
+      <main className="min-h-screen pt-24">
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+      </main>
+      <Footer />
+      <CartSheet />
+      <Toaster position="top-right" />
+    </>
   );
 }

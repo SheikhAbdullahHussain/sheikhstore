@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { money, useStore, type Order } from "@/lib/store";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/checkout")({
   head: () => ({
@@ -45,6 +46,27 @@ function Checkout() {
 
   const shippingFee = 0; // Free nationwide shipping across Pakistan
   const grandTotal = cartTotal + shippingFee;
+  const [placingOrder, setPlacingOrder] = useState(false);
+
+  const handlePlaceOrder = async () => {
+    if (placingOrder) return;
+
+    try {
+      setPlacingOrder(true);
+
+      const createdOrder = await placeOrder({
+        shipping,
+        payment,
+      });
+
+      setOrder(createdOrder);
+    } catch (error) {
+      console.error("Failed to place order:", error);
+      toast.error("Order can't be placed. Please try again.");
+    } finally {
+      setPlacingOrder(false);
+    }
+  };
 
   if (order) {
     return (
@@ -118,9 +140,7 @@ function Checkout() {
             >
               {i + 1}
             </span>
-            <span
-              className={`text-sm ${i === step ? "font-semibold" : "text-muted-foreground"}`}
-            >
+            <span className={`text-sm ${i === step ? "font-semibold" : "text-muted-foreground"}`}>
               {s}
             </span>
             {i < steps.length - 1 && <span className="h-px w-6 bg-border sm:w-12" />}
@@ -239,7 +259,12 @@ function Checkout() {
                 <div className="grid gap-4 rounded-xl bg-secondary/50 p-4 sm:grid-cols-2">
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="p-num">Card number</Label>
-                    <Input id="p-num" required placeholder="4242 4242 4242 4242" inputMode="numeric" />
+                    <Input
+                      id="p-num"
+                      required
+                      placeholder="4242 4242 4242 4242"
+                      inputMode="numeric"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="p-exp">Expiry</Label>
@@ -306,9 +331,10 @@ function Checkout() {
                 <Button
                   size="lg"
                   className="flex-1"
-                  onClick={() => setOrder(placeOrder({ shipping, payment }))}
+                  onClick={handlePlaceOrder}
+                  disabled={placingOrder}
                 >
-                  Place Order · {money(grandTotal)}
+                  {placingOrder ? "Placing Order..." : `Place Order · ${money(grandTotal)}`}
                 </Button>
               </div>
             </div>
