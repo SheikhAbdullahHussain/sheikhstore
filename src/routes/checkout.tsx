@@ -1,11 +1,22 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check, CreditCard, Minus, Plus, ShoppingBag, Trash2, Wallet } from "lucide-react";
+import {
+  Banknote,
+  Check,
+  Copy,
+  Minus,
+  Plus,
+  ShoppingBag,
+  Smartphone,
+  Trash2,
+  Wallet,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { money, useStore, type Order } from "@/lib/store";
+import { sendOrderEmails } from "@/lib/order-emails";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/checkout")({
@@ -15,7 +26,7 @@ export const Route = createFileRoute("/checkout")({
       {
         name: "description",
         content:
-          "Review your SheikhStore bag, enter shipping details, choose cash on delivery or card, and confirm your order in three quick steps.",
+          "Review your SheikhStore bag, enter shipping details, choose cash on delivery, bank transfer or Easypaisa, and confirm your order in three quick steps.",
       },
       { property: "og:title", content: "Checkout — SheikhStore" },
       {
@@ -28,14 +39,49 @@ export const Route = createFileRoute("/checkout")({
 });
 
 type Shipping = { name: string; email: string; address: string; city: string; phone: string };
+type PaymentMethod = "cod" | "bank" | "easypaisa";
 
 const steps = ["Shipping", "Payment", "Confirm"];
+
+// TODO: replace with your real account details.
+const BANK_DETAILS = {
+  bankName: "Meezan Bank",
+  accountTitle: "Sheikh Suffiyan",
+  accountNumber: "0123456789012",
+  iban: "PK00MEZN0000000123456789",
+};
+const EASYPAISA_NUMBER = "0300-1234567";
+const EASYPAISA_TITLE = "Sheikh Suffiyan";
+
+function CopyableRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm font-medium">{value}</p>
+      </div>
+      <button
+        type="button"
+        aria-label={`Copy ${label}`}
+        className="grid size-8 shrink-0 place-items-center rounded-lg border transition-colors hover:bg-secondary"
+        onClick={() => {
+          void navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+      >
+        {copied ? <Check className="size-3.5 text-gold" /> : <Copy className="size-3.5" />}
+      </button>
+    </div>
+  );
+}
 
 function Checkout() {
   const { cart, cartTotal, setQty, removeFromCart, placeOrder } = useStore();
   const [step, setStep] = useState(0);
   const [order, setOrder] = useState<Order | null>(null);
-  const [payment, setPayment] = useState<"cod" | "card">("cod");
+  const [payment, setPayment] = useState<PaymentMethod>("cod");
   const [shipping, setShipping] = useState<Shipping>({
     name: "",
     email: "",
@@ -44,8 +90,6 @@ function Checkout() {
     phone: "",
   });
 
-  const shippingFee = 0; // Free nationwide shipping across Pakistan
-  const grandTotal = cartTotal + shippingFee;
   const [placingOrder, setPlacingOrder] = useState(false);
 
   const handlePlaceOrder = async () => {
@@ -60,6 +104,11 @@ function Checkout() {
       });
 
       setOrder(createdOrder);
+
+      // Best-effort — a failed email should never block order confirmation.
+      sendOrderEmails({ data: createdOrder }).catch((err) => {
+        console.error("Failed to send order emails:", err);
+      });
     } catch (error) {
       console.error("Failed to place order:", error);
       toast.error("Order can't be placed. Please try again.");
@@ -97,10 +146,23 @@ function Checkout() {
           <Separator className="my-4" />
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">
-              Total paid ({order.payment === "cod" ? "Cash on delivery" : "Card"})
+              Total paid (
+              {order.payment === "cod"
+                ? "Cash on delivery"
+                : order.payment === "bank"
+                  ? "Bank transfer"
+                  : "Easypaisa"}
+              )
             </span>
             <span className="font-display text-xl font-bold">{money(order.total)}</span>
           </div>
+          {order.payment !== "cod" && (
+            <p className="mt-4 rounded-lg bg-secondary/60 p-3 text-xs text-muted-foreground">
+              Please complete your {order.payment === "bank" ? "bank transfer" : "Easypaisa payment"}{" "}
+              using the details shown at checkout and send us a screenshot on WhatsApp so we can
+              confirm and dispatch your order.
+            </p>
+          )}
         </div>
         <Button asChild size="lg" className="mt-8">
           <Link to="/collections">Continue Shopping</Link>
@@ -130,23 +192,27 @@ function Checkout() {
     <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <h1 className="text-3xl font-bold">Cart & Checkout</h1>
 
-      <ol className="mt-6 flex items-center gap-3">
-        {steps.map((s, i) => (
-          <li key={s} className="flex items-center gap-3">
-            <span
-              className={`grid size-8 place-items-center rounded-full text-xs font-semibold ${
-                i <= step ? "bg-ink text-primary-foreground" : "bg-secondary text-muted-foreground"
-              }`}
-            >
-              {i + 1}
-            </span>
-            <span className={`text-sm ${i === step ? "font-semibold" : "text-muted-foreground"}`}>
-              {s}
-            </span>
-            {i < steps.length - 1 && <span className="h-px w-6 bg-border sm:w-12" />}
-          </li>
-        ))}
-      </ol>
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:overflow-visible sm:px-0">
+        <ol className="mt-6 flex w-max items-center gap-2 sm:w-auto sm:gap-3">
+          {steps.map((s, i) => (
+            <li key={s} className="flex shrink-0 items-center gap-2 sm:gap-3">
+              <span
+                className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold ${
+                  i <= step ? "bg-ink text-primary-foreground" : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {i + 1}
+              </span>
+              <span
+                className={`whitespace-nowrap text-sm ${i === step ? "font-semibold" : "text-muted-foreground"}`}
+              >
+                {s}
+              </span>
+              {i < steps.length - 1 && <span className="h-px w-6 shrink-0 bg-border sm:w-12" />}
+            </li>
+          ))}
+        </ol>
+      </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
         <div className="surface-elevated hairline rounded-2xl p-6">
@@ -240,39 +306,58 @@ function Checkout() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPayment("card")}
+                  onClick={() => setPayment("bank")}
                   className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-colors ${
-                    payment === "card" ? "border-gold bg-secondary" : "hover:bg-secondary/60"
+                    payment === "bank" ? "border-gold bg-secondary" : "hover:bg-secondary/60"
                   }`}
                 >
-                  <CreditCard className="size-5 text-gold" />
+                  <Banknote className="size-5 text-gold" />
                   <span>
-                    <span className="block text-sm font-semibold">Credit Card</span>
+                    <span className="block text-sm font-semibold">Bank Transfer</span>
                     <span className="block text-xs text-muted-foreground">
-                      Demo form — no real payment is processed
+                      Transfer to our account, then share the receipt
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayment("easypaisa")}
+                  className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-colors ${
+                    payment === "easypaisa" ? "border-gold bg-secondary" : "hover:bg-secondary/60"
+                  }`}
+                >
+                  <Smartphone className="size-5 text-gold" />
+                  <span>
+                    <span className="block text-sm font-semibold">Easypaisa</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Send to our Easypaisa account, then share the receipt
                     </span>
                   </span>
                 </button>
               </div>
 
-              {payment === "card" && (
-                <div className="grid gap-4 rounded-xl bg-secondary/50 p-4 sm:grid-cols-2">
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="p-num">Card number</Label>
-                    <Input
-                      id="p-num"
-                      required
-                      placeholder="4242 4242 4242 4242"
-                      inputMode="numeric"
-                    />
+              {payment === "bank" && (
+                <div className="rounded-xl bg-secondary/50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Transfer to this account
+                  </p>
+                  <div className="mt-2 divide-y">
+                    <CopyableRow label="Bank" value={BANK_DETAILS.bankName} />
+                    <CopyableRow label="Account title" value={BANK_DETAILS.accountTitle} />
+                    <CopyableRow label="Account number" value={BANK_DETAILS.accountNumber} />
+                    <CopyableRow label="IBAN" value={BANK_DETAILS.iban} />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="p-exp">Expiry</Label>
-                    <Input id="p-exp" required placeholder="MM/YY" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="p-cvc">CVC</Label>
-                    <Input id="p-cvc" required placeholder="123" inputMode="numeric" />
+                </div>
+              )}
+
+              {payment === "easypaisa" && (
+                <div className="rounded-xl bg-secondary/50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Send to this Easypaisa account
+                  </p>
+                  <div className="mt-2 divide-y">
+                    <CopyableRow label="Easypaisa number" value={EASYPAISA_NUMBER} />
+                    <CopyableRow label="Account title" value={EASYPAISA_TITLE} />
                   </div>
                 </div>
               )}
@@ -321,9 +406,14 @@ function Checkout() {
                   {shipping.phone} · {shipping.email}
                 </p>
                 <p className="mt-2 text-muted-foreground">
-                  Payment: {payment === "cod" ? "Cash on Delivery" : "Credit Card (demo)"}
+                  Payment:{" "}
+                  {payment === "cod" ? "Cash on Delivery" : payment === "bank" ? "Bank Transfer" : "Easypaisa"}
                 </p>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Delivery charges are not included above — they'll be confirmed separately based on
+                your city.
+              </p>
               <div className="flex gap-3">
                 <Button type="button" variant="outline" size="lg" onClick={() => setStep(1)}>
                   Back
@@ -334,7 +424,7 @@ function Checkout() {
                   onClick={handlePlaceOrder}
                   disabled={placingOrder}
                 >
-                  {placingOrder ? "Placing Order..." : `Place Order · ${money(grandTotal)}`}
+                  {placingOrder ? "Placing Order..." : `Place Order · ${money(cartTotal)}`}
                 </Button>
               </div>
             </div>
@@ -394,12 +484,12 @@ function Checkout() {
               <dd>{money(cartTotal)}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">Shipping</dt>
-              <dd>Free — nationwide</dd>
+              <dt className="text-muted-foreground">Delivery</dt>
+              <dd className="text-muted-foreground">Confirmed by city</dd>
             </div>
             <div className="flex justify-between pt-2 text-base font-semibold">
               <dt>Total</dt>
-              <dd className="font-display text-lg">{money(grandTotal)}</dd>
+              <dd className="font-display text-lg">{money(cartTotal)}</dd>
             </div>
           </dl>
         </aside>

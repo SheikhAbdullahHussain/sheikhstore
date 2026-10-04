@@ -1,46 +1,15 @@
 import { removeBackground } from "@imgly/background-removal";
+import { uploadImage } from "@/lib/storage";
 
 export const MAX_IMAGES = 6;
 export const MAX_FILE_MB = 5;
 const MAX_DIMENSION = 1200;
 // Background removal runs faster (and still looks fine for product photos)
 // on a smaller input, since we resize the final result anyway.
-// Smaller input = noticeably faster inference on CPU (most browsers don't
-// support WebGPU yet, so this is what most users actually get). Trade-off:
-// slightly less crisp edges on very detailed images.
 const BG_REMOVAL_INPUT_DIMENSION = 576;
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 export type ImagePickError = { file: string; reason: string };
-
-/** Resize + compress any image file to a data URL (used for banners and general uploads). */
-export function compressImage(file: File, maxDim = MAX_DIMENSION): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("Canvas unsupported"));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", 0.85));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Unreadable image"));
-    };
-    img.src = url;
-  });
-}
 
 export type PickImagesOptions = {
   /** If true, runs client-side AI background removal and fills with bgColor. */
@@ -49,37 +18,8 @@ export type PickImagesOptions = {
   bgColor?: string;
 };
 
-/** Compress + resize an image file into a data URL that is safe to store. */
-function compress(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const scale = Math.min(1, MAX_DIMENSION / Math.max(img.width, img.height));
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("Canvas unsupported"));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", 0.82));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Unreadable image"));
-    };
-    img.src = url;
-  });
-}
-
-/** Downscale a file to maxDim before feeding it to the AI model — smaller input, faster inference. */
-function resizeToBlob(file: File, maxDim: number): Promise<Blob> {
+/** Resize + compress an image file into a Blob (JPEG). */
+function resizeToBlob(file: File | Blob, maxDim: number, quality = 0.85): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -100,7 +40,7 @@ function resizeToBlob(file: File, maxDim: number): Promise<Blob> {
       canvas.toBlob(
         (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
         "image/jpeg",
-        0.9,
+        quality,
       );
     };
     img.onerror = () => {
@@ -113,21 +53,13 @@ function resizeToBlob(file: File, maxDim: number): Promise<Blob> {
 
 /**
  * Runs AI background removal (fully client-side, via @imgly/background-removal)
- * then composites the cutout onto a solid-color background.
- * - Assets are self-hosted (publicPath) instead of the default external CDN.
- * - Uses the smaller/faster "isnet_quint8" model instead of the ~80MB default.
- * - Downscales the input first, since inference time scales with resolution.
+ * then composites the cutout onto a solid-color background, returning a Blob.
  */
-async function removeBackgroundToColor(file: File, bgColor: string): Promise<string> {
-  const resized = await resizeToBlob(file, BG_REMOVAL_INPUT_DIMENSION);
+async function removeBackgroundToColorBlob(file: File, bgColor: string): Promise<Blob> {
+  const resized = await resizeToBlob(file, BG_REMOVAL_INPUT_DIMENSION, 0.9);
   const cutoutBlob = await removeBackground(resized, {
-    // No custom publicPath — the model assets aren't shipped in the npm
-    // package at all, they only exist on imgly's own CDN (staticimgly.com),
-    // matched to this exact package version. Self-hosting them would mean
-    // downloading that CDN's files ourselves; the default just works.
     model: "isnet_quint8",
-    // device: "gpu", // falls back to cpu automatically if WebGPU isn't available
-    device: "cpu", // falls back to cpu automatically if WebGPU isn't available
+    device: "gpu", // falls back to cpu automatically if WebGPU isn't available
   });
   const url = URL.createObjectURL(cutoutBlob);
   return new Promise((resolve, reject) => {
@@ -145,7 +77,11 @@ async function removeBackgroundToColor(file: File, bgColor: string): Promise<str
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, img.width, img.height);
       ctx.drawImage(img, 0, 0);
-      resolve(canvas.toDataURL("image/jpeg", 0.9));
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
+        "image/jpeg",
+        0.9,
+      );
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -156,8 +92,22 @@ async function removeBackgroundToColor(file: File, bgColor: string): Promise<str
 }
 
 /**
- * Validate + process files picked from the admin's device.
- * Enforces file type, per-file size and the total image count per product.
+ * Resize + upload any image file to Supabase Storage, returning its public URL.
+ * Used for banners and any other single-image upload.
+ */
+export async function compressAndUploadImage(
+  file: File,
+  maxDim = MAX_DIMENSION,
+  folder = "banners",
+): Promise<string> {
+  const blob = await resizeToBlob(file, maxDim);
+  return uploadImage(blob, folder);
+}
+
+/**
+ * Validate + process files picked from the admin's device, uploading each to
+ * Supabase Storage and returning their public URLs (not data URLs — this is
+ * what keeps product fetches fast as the catalogue grows).
  * When options.removeBg is true, each image gets its background swapped for
  * options.bgColor (default white) using client-side AI segmentation.
  */
@@ -185,18 +135,15 @@ export async function pickProductImages(
       continue;
     }
     try {
-      const processed = options?.removeBg
-        ? await removeBackgroundToColor(file, options.bgColor ?? "#ffffff")
-        : await compress(file);
-      images.push(processed);
+      const blob = options?.removeBg
+        ? await removeBackgroundToColorBlob(file, options.bgColor ?? "#ffffff")
+        : await resizeToBlob(file, MAX_DIMENSION);
+      const url = await uploadImage(blob, "products");
+      images.push(url);
       room -= 1;
     } catch (err) {
       console.error("Image processing failed:", err);
-      errors.push({
-        file: file.name,
-        reason: err instanceof Error ? err.message : "could not be processed",
-      });
-      // errors.push({ file: file.name, reason: "could not be processed" });
+      errors.push({ file: file.name, reason: "could not be processed" });
     }
   }
 

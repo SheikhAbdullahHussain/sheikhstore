@@ -90,7 +90,10 @@ export function CartSheet() {
         </div>
 
         {cart.length > 0 && (
-          <SheetFooter className="gap-3">
+          // Force a vertical stack — shadcn's default SheetFooter switches to a
+          // horizontal row at the `sm` breakpoint, which squeezed everything
+          // (subtotal, disclaimer text, button) into one cramped line on desktop.
+          <SheetFooter className="flex-col items-stretch gap-3 sm:flex-col sm:items-stretch sm:space-x-0">
             <Separator />
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
@@ -99,7 +102,7 @@ export function CartSheet() {
             <p className="text-xs text-muted-foreground">
               Shipping and taxes are calculated at checkout.
             </p>
-            <Button asChild size="lg" onClick={() => setCartOpen(false)}>
+            <Button asChild size="lg" className="w-full" onClick={() => setCartOpen(false)}>
               <Link to="/checkout">Checkout</Link>
             </Button>
           </SheetFooter>

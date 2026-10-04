@@ -15,10 +15,8 @@ import { money, useStore } from "@/lib/store";
 import { productSlug } from "@/data/products";
 
 export function FeaturedCarousel() {
-  // const { products, addToCart, setCartOpen } = useStore();
   const { products, productsLoading, addToCart, setCartOpen } = useStore();
   const [plugin, setPlugin] = useState<ReturnType<typeof Autoplay>[]>([]);
-  // const featured = products.filter((p) => p.featured).slice(0, 6);
   const featured = products.slice(0, 6);
 
   useEffect(() => {
@@ -34,7 +32,7 @@ export function FeaturedCarousel() {
       </section>
     );
   }
-  
+
   if (featured.length === 0) return null;
 
   return (
@@ -76,13 +74,15 @@ export function FeaturedCarousel() {
                   </div>
                   <Button
                     className="w-full"
+                    disabled={p.stock <= 0}
                     onClick={() => {
                       addToCart(p);
                       setCartOpen(true);
                       toast.success(`${p.title} added to cart`);
                     }}
                   >
-                    <ShoppingBag className="size-4" /> Quick Add to Cart
+                    <ShoppingBag className="size-4" />
+                    {p.stock <= 0 ? "Out of Stock" : "Quick Add to Cart"}
                   </Button>
                 </div>
               </div>

@@ -13,7 +13,7 @@ export function LoadingScreen({ visible }: { visible: boolean }) {
         <div className="h-1 w-40 overflow-hidden rounded-full bg-secondary">
           <div className="h-full w-1/3 animate-[loading-bar_1.1s_ease-in-out_infinite] rounded-full bg-gold" />
         </div>
-        <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+        <p className="text-[8px] uppercase tracking-[0.24em] text-muted-foreground">
           Loading…
         </p>
       </div>

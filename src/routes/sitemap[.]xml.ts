@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 import { productSlug } from "@/data/products";
+import { fetchProducts } from "@/lib/products-api";
 
-const BASE_URL = "https://sheikh-store-shop.lovable.app";
+const BASE_URL = "https://sheikhstore-sheikh-abdullahs.vercel.app";
 
 interface SitemapEntry {
   path: string;
@@ -13,7 +14,9 @@ interface SitemapEntry {
 export const Route = createFileRoute("/sitemap.xml")({
   server: {
     handlers: {
-      GET: () => {
+      GET: async () => {
+        const products = await fetchProducts();
+
         const entries: SitemapEntry[] = [
           { path: "/", changefreq: "weekly", priority: "1.0" },
           { path: "/collections", changefreq: "weekly", priority: "0.9" },
@@ -21,7 +24,7 @@ export const Route = createFileRoute("/sitemap.xml")({
           { path: "/contact", changefreq: "monthly", priority: "0.6" },
           { path: "/privacy", changefreq: "yearly", priority: "0.3" },
           { path: "/terms", changefreq: "yearly", priority: "0.3" },
-          ...seedProducts.map((p) => ({
+          ...products.map((p) => ({
             path: `/product/${encodeURIComponent(p.id)}/${encodeURIComponent(productSlug(p))}`,
             changefreq: "weekly" as const,
             priority: "0.8",

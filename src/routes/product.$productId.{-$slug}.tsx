@@ -9,7 +9,7 @@ import { money, useStore } from "@/lib/store";
 import { productSlug } from "@/data/products";
 import { fetchProductById } from "@/lib/products-api";
 
-const BASE_URL = "https://sheikh-store-shop.lovable.app";
+const BASE_URL = "https://sheikhstore-sheikh-abdullahs.vercel.app";
 
 export const Route = createFileRoute("/product/$productId/{-$slug}")({
   loader: async ({ params }) => {
@@ -245,13 +245,14 @@ function ProductDetail() {
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button size="lg" className="flex-1" onClick={add}>
-              <ShoppingBag className="size-4" /> Add to Cart
+            <Button size="lg" className="flex-1" onClick={add} disabled={product.stock <= 0}>
+              <ShoppingBag className="size-4" /> {product.stock <= 0 ? "Out of Stock" : "Add to Cart"}
             </Button>
             <Button
               size="lg"
               variant="outline"
               className="flex-1"
+              disabled={product.stock <= 0}
               onClick={() => {
                 add();
                 setCartOpen(false);
@@ -263,8 +264,8 @@ function ProductDetail() {
           </div>
 
           <p className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
-            <Truck className="size-4 text-gold" /> Free nationwide shipping across Pakistan ·
-            7-day easy exchange
+            <Truck className="size-4 text-gold" /> Nationwide delivery — charges confirmed by city
+            at checkout · 7-day easy exchange
           </p>
         </div>
       </div>

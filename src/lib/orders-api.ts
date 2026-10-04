@@ -15,16 +15,26 @@ type RawOrderRow = {
   status: OrderStatus;
 };
 
-export async function insertOrder(order: Order): Promise<void> {
-  const { error } = await supabase.from("orders").insert({
-    id: order.id,
-    created_at: order.createdAt,
-    items: order.items,
-    total: order.total,
-    shipping: order.shipping,
-    payment: order.payment,
-  });
+/**
+ * Inserts an order and returns it with the id the database generated
+ * (a sequential SS-000001-style id — see order-sequence-migration.sql).
+ * We don't send an id in the payload; the column's default fills it in.
+ */
+export async function insertOrder(
+  order: Omit<Order, "id">,
+): Promise<{ id: string; createdAt: string }> {
+  const { data, error } = await supabase
+    .from("orders")
+    .insert({
+      items: order.items,
+      total: order.total,
+      shipping: order.shipping,
+      payment: order.payment,
+    })
+    .select("id, created_at")
+    .single();
   if (error) throw error;
+  return { id: data.id as string, createdAt: data.created_at as string };
 }
 
 export async function fetchOrders(): Promise<OrderRow[]> {

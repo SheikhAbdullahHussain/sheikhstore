@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CATEGORIES, CLOTHING_TYPES, KIDS_GENDERS, type Subcategory } from "@/data/products";
 import { useStore } from "@/lib/store";
-import { ProductCard } from "./ProductCard";
+import {ProductCard} from "./ProductCard";
+
 
 type SubcategoryFilter = Subcategory | "All";
 

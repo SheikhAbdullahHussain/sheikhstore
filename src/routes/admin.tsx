@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/select";
 import { money, useStore } from "@/lib/store";
 import { getSession, onAuthStateChange, signIn, signOut } from "@/lib/auth";
-import { MAX_FILE_MB, MAX_IMAGES, compressImage, pickProductImages } from "@/lib/images";
+// import { MAX_FILE_MB, MAX_IMAGES, compressImage, pickProductImages } from "@/lib/images";
+import { MAX_FILE_MB, MAX_IMAGES, compressAndUploadImage, pickProductImages } from "@/lib/images";
 import { deleteHeroBanner, fetchHeroBanners, upsertHeroBanner } from "@/lib/hero-banners-api";
 import { HERO_SLIDES } from "@/data/hero-slides";
 import {
@@ -296,11 +297,17 @@ function Admin() {
       return;
     }
 
+    // setBannerUploadingKey(slideKey);
+    // try {
+    //   const dataUrl = await compressImage(file, 1600);
+    //   await upsertHeroBanner(slideKey, dataUrl);
+    //   setBanners((m) => ({ ...m, [slideKey]: dataUrl }));
+    //   toast.success("Banner updated");
     setBannerUploadingKey(slideKey);
     try {
-      const dataUrl = await compressImage(file, 1600);
-      await upsertHeroBanner(slideKey, dataUrl);
-      setBanners((m) => ({ ...m, [slideKey]: dataUrl }));
+      const url = await compressAndUploadImage(file, 1600, "banners");
+      await upsertHeroBanner(slideKey, url);
+      setBanners((m) => ({ ...m, [slideKey]: url }));
       toast.success("Banner updated");
     } catch (err) {
       console.error("Banner upload failed:", err);

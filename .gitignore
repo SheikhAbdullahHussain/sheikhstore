@@ -56,8 +56,8 @@ bun.lockb
 # Yarn
 yarn.lock
 
-# Lovable
-.lovable/
+# # Lovable
+# .lovable/
 
 #bg
 public/bg-removal/
