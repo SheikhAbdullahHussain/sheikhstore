@@ -46,7 +46,7 @@ export function FeaturedCarousel() {
 
       <Carousel opts={{ loop: true, align: "start" }} plugins={plugin} className="w-full">
         <CarouselContent>
-          {featured.map((p) => (
+          {featured.map((p, i) => (
             <CarouselItem key={p.id} className="sm:basis-1/2 lg:basis-1/3">
               <div className="surface-elevated hairline overflow-hidden rounded-2xl">
                 <Link
@@ -56,7 +56,10 @@ export function FeaturedCarousel() {
                   <img
                     src={p.image}
                     alt={p.title}
-                    loading="lazy"
+                    // Above-the-fold — the first few slides should load immediately,
+                    // not wait on a lazy-load trigger.
+                    loading={i < 3 ? "eager" : "lazy"}
+                    fetchPriority={i === 0 ? "high" : undefined}
                     width={900}
                     height={900}
                     className="aspect-[4/3] w-full object-cover"
